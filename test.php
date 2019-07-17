@@ -26,6 +26,5 @@ class Cat implements Animal {
         // TODO: Implement study() method.
     }
 }
-
 $cat=new Cat();
 $cat->run();
