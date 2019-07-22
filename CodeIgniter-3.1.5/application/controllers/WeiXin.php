@@ -10,8 +10,8 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 class WeiXin extends CI_Controller
 {
-    private $appId='wx98b714d35cfacc0d';
-    private $securet='630decf329857c0f14fe5a91dc25d9b7';
+    private $appId='wx33b090e0a4bb0ea0';
+    private $securet='947fd0db895e6da5261812b6e3792eea';
 
 
     /*
@@ -33,6 +33,7 @@ class WeiXin extends CI_Controller
         if (time()>($expires_time + $refresh_time) || !$access_token || !$jsapi_ticket){
             $url = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=".$this->appId."&secret=".$this->securet;
             $res = $this->http_request($url);
+            echo $res;
             $result = json_decode($res, true);
             $access_token = $result["access_token"];
             //获取jsapi_ticket
@@ -51,7 +52,7 @@ class WeiXin extends CI_Controller
             $push_url=$this->config->item('push_url');
             if($push_url){
                 foreach ($push_url as $v){
-                    echo $this->http_request($v,json_encode(array('access_token'=>$access_token,'jsapi_ticket'=>$jsapi_ticket)));
+                    $this->http_request($v,json_encode(array('access_token'=>$access_token,'jsapi_ticket'=>$jsapi_ticket)));
                 }
             }
         }
@@ -59,24 +60,93 @@ class WeiXin extends CI_Controller
     }
 
     /*
-     * 自定义菜单
+     * snsapi_base获取openid
      * */
-    public function createMenu($menu)
-    {
-        $access_token = $this->getAccessToken();
-        $url = "https://api.weixin.qq.com/cgi-bin/menu/create?access_token=$access_token";
-        if (empty($menu)) {
-            return false;
-        }
-        $menu = urldecode(json_encode($this->url_encode($menu)));
-        $res = getHtml($url, array(
-            'method' => 'POST',
-            'content' => $menu
-        ));
-        
-        print_r($res);
+    public function getOpenid(){
+        $appId=$this->appId;
+        $this->load->helper('url');
+        $redirect_uri=urlencode(site_url('WeiXin/getOpenid'));
+        $url='https://open.weixin.qq.com/connect/oauth2/authorize?appid='.$appId.'&redirect_uri='.$redirect_uri.'&response_type=code&scope=snsapi_base&state=123#wechat_redirect';
+        $this->http_request($url);
     }
 
+    public function authorize1(){
+        $code=$_GET['code'];
+        echo 123;
+    }
+    /*
+     *snsapi_userinfo 获取用户信息
+     * */
+
+
+    /*
+     * 自定义菜单
+     * */
+    public function createMenu()
+    {
+        $menu=file_get_contents("php://input");
+        $access_token=$this->getAccessToken();
+        $access_token=json_decode($access_token,true);
+        $access_token=$access_token['access_token'];
+        $url = "https://api.weixin.qq.com/cgi-bin/menu/create?access_token=$access_token";
+        if (!empty($menu)) {
+            $res = $this->http_request($url,$menu);
+            return $res;
+        }
+    }
+    /*
+     * 测试微信自定义菜单
+     * */
+    public function test()
+    {
+        $json = '{
+     "button":[
+     {    
+          "type":"click",
+          "name":"今日歌曲",
+          "key":"V1001_TODAY_MUSIC"
+      },
+      {
+           "name":"菜",
+           "sub_button":[
+           {    
+               "type":"view",
+               "name":"搜索",
+               "url":"http://www.soso.com/"
+            },
+            {
+                 "type":"miniprogram",
+                 "name":"wxa",
+                 "url":"http://mp.weixin.qq.com",
+                 "appid":"wx286b93c14bbf93aa",
+                 "pagepath":"pages/lunar/index"
+             },
+            {
+               "type":"click",
+               "name":"赞一下我们",
+               "key":"V1001_GOOD"
+            }]
+       }]
+ }';
+        $url='http://localhost/CodeIgniter-3.1.5/index.php/WeiXin/createMenu';
+        $res = $this->http_request($url,$json);
+        var_dump($res);
+    }
+    /*
+     * json_encode 中文变Unicode的问题
+     * */
+    public function url_encode($str)
+    {
+        if (is_array($str)) {
+            foreach ($str as $key => $value) {
+                $str[urlencode($key)] = $this->url_encode($value);
+            }
+        } else {
+            $str = urlencode($str);
+        }
+
+        return $str;
+    }
 
     public function http_request($url, $data = null)
     {
@@ -86,11 +156,40 @@ class WeiXin extends CI_Controller
         curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, FALSE);
         if (!empty($data)){
             curl_setopt($curl, CURLOPT_POST, 1);
+            curl_setopt($curl, CURLOPT_TIMEOUT, 1);
             curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
         }
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, TRUE);
         $output = curl_exec($curl);
         curl_close($curl);
         return $output;
+    }
+
+    public function doRequest($host,$path, $param=array()){
+        $query = isset($param)? http_build_query($param) : '';
+
+        $port = 80;
+        $errno = 0;
+        $errstr = '';
+        $timeout = 10;
+
+        $fp = fsockopen($host, $port, $errno, $errstr, $timeout);
+
+        $out = "POST ".$path." HTTP/1.1\r\n";
+        $out .= "host:".$host."\r\n";
+        $out .= "content-length:".strlen($query)."\r\n";
+        $out .= "content-type:application/x-www-form-urlencoded\r\n";
+        $out .= "connection:close\r\n\r\n";
+        $out .= $query;
+
+        fputs($fp, $out);
+        fclose($fp);
+    }
+    function get_url() {
+        $sys_protocal = isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == '443' ? 'https://' : 'http://';
+        $php_self = $_SERVER['PHP_SELF'] ? $_SERVER['PHP_SELF'] : $_SERVER['SCRIPT_NAME'];
+        $path_info = isset($_SERVER['PATH_INFO']) ? $_SERVER['PATH_INFO'] : '';
+        $relate_url = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : $php_self.(isset($_SERVER['QUERY_STRING']) ? '?'.$_SERVER['QUERY_STRING'] : $path_info);
+        return $sys_protocal.(isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '').$relate_url;
     }
 }
